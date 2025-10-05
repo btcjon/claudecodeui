@@ -285,68 +285,45 @@ async function extractProjectDirectory(projectName) {
       // Fall back to decoded project name if no sessions
       extractedPath = projectName.replace(/-/g, '/');
     } else {
-      // Process all JSONL files to collect cwd values
-      for (const file of jsonlFiles) {
-        const jsonlFile = path.join(projectDir, file);
-        const fileStream = fsSync.createReadStream(jsonlFile);
-        const rl = readline.createInterface({
-          input: fileStream,
-          crlfDelay: Infinity
-        });
-        
-        for await (const line of rl) {
-          if (line.trim()) {
-            try {
-              const entry = JSON.parse(line);
-              
-              if (entry.cwd) {
-                // Count occurrences of each cwd
-                cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-                
-                // Track the most recent cwd
-                const timestamp = new Date(entry.timestamp || 0).getTime();
-                if (timestamp > latestTimestamp) {
-                  latestTimestamp = timestamp;
-                  latestCwd = entry.cwd;
-                }
-              }
-            } catch (parseError) {
-              // Skip malformed lines
+      // PERFORMANCE: Only read the most recent JSONL file instead of all files
+      // Get file stats to find the newest file
+      const filesWithStats = await Promise.all(
+        jsonlFiles.map(async (file) => {
+          const filePath = path.join(projectDir, file);
+          const stats = await fs.stat(filePath);
+          return { file, mtime: stats.mtime };
+        })
+      );
+
+      // Sort by modification time and get the most recent file
+      filesWithStats.sort((a, b) => b.mtime - a.mtime);
+      const mostRecentFile = filesWithStats[0].file;
+
+      // Only read the most recent file to extract cwd
+      const jsonlFile = path.join(projectDir, mostRecentFile);
+      const fileStream = fsSync.createReadStream(jsonlFile);
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+      });
+
+      for await (const line of rl) {
+        if (line.trim()) {
+          try {
+            const entry = JSON.parse(line);
+
+            if (entry.cwd) {
+              latestCwd = entry.cwd;
+              break; // Found cwd, no need to read more
             }
+          } catch (parseError) {
+            // Skip malformed lines
           }
         }
       }
-      
-      // Determine the best cwd to use
-      if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
-      } else if (cwdCounts.size === 1) {
-        // Only one cwd, use it
-        extractedPath = Array.from(cwdCounts.keys())[0];
-      } else {
-        // Multiple cwd values - prefer the most recent one if it has reasonable usage
-        const mostRecentCount = cwdCounts.get(latestCwd) || 0;
-        const maxCount = Math.max(...cwdCounts.values());
-        
-        // Use most recent if it has at least 25% of the max count
-        if (mostRecentCount >= maxCount * 0.25) {
-          extractedPath = latestCwd;
-        } else {
-          // Otherwise use the most frequently used cwd
-          for (const [cwd, count] of cwdCounts.entries()) {
-            if (count === maxCount) {
-              extractedPath = cwd;
-              break;
-            }
-          }
-        }
-        
-        // Fallback (shouldn't reach here)
-        if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
-        }
-      }
+
+      // Use the cwd we found, or fall back to decoded project name
+      extractedPath = latestCwd || projectName.replace(/-/g, '/');
     }
     
     // Cache the result
