@@ -389,9 +389,9 @@ async function getProjects() {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
         
-        // PERFORMANCE: Use simple path decoding instead of reading JSONL files
-        // This avoids expensive I/O operations on every project list fetch
-        const actualProjectDir = entry.name.replace(/-/g, '/');
+        // Extract actual project directory from JSONL sessions
+        // This correctly handles folder names with hyphens/underscores
+        const actualProjectDir = await extractProjectDirectory(entry.name);
 
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
