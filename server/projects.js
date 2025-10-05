@@ -389,14 +389,15 @@ async function getProjects() {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
         
-        // Extract actual project directory from JSONL sessions
-        const actualProjectDir = await extractProjectDirectory(entry.name);
-        
+        // PERFORMANCE: Use simple path decoding instead of reading JSONL files
+        // This avoids expensive I/O operations on every project list fetch
+        const actualProjectDir = entry.name.replace(/-/g, '/');
+
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
         const fullPath = actualProjectDir;
-        
+
         const project = {
           name: entry.name,
           path: actualProjectDir,
@@ -405,45 +406,18 @@ async function getProjects() {
           isCustomName: !!customName,
           sessions: []
         };
-        
-        // Try to get sessions for this project (just first 5 for performance)
-        try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
-          project.sessions = sessionResult.sessions || [];
-          project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
-            total: sessionResult.total
-          };
-        } catch (e) {
-          console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
-        }
-        
-        // Also fetch Cursor sessions for this project
-        try {
-          project.cursorSessions = await getCursorSessions(actualProjectDir);
-        } catch (e) {
-          console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
-          project.cursorSessions = [];
-        }
-        
-        // Add TaskMaster detection
-        try {
-          const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-          project.taskmaster = {
-            hasTaskmaster: taskMasterResult.hasTaskmaster,
-            hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-            metadata: taskMasterResult.metadata,
-            status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
-          };
-        } catch (e) {
-          console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
-          project.taskmaster = {
-            hasTaskmaster: false,
-            hasEssentialFiles: false,
-            metadata: null,
-            status: 'error'
-          };
-        }
+
+        // PERFORMANCE OPTIMIZATION: Skip expensive operations in initial load
+        // These can be fetched on-demand when user clicks on a project
+        project.sessions = [];
+        project.sessionMeta = { hasMore: false, total: 0 };
+        project.cursorSessions = [];
+        project.taskmaster = {
+          hasTaskmaster: false,
+          hasEssentialFiles: false,
+          metadata: null,
+          status: 'unknown'
+        };
         
         projects.push(project);
       }

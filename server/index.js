@@ -208,11 +208,37 @@ app.get('/api/config', authenticateToken, (req, res) => {
     });
 });
 
+// Cache for projects list
+let projectsCache = null;
+let projectsCacheTime = 0;
+const PROJECTS_CACHE_TTL = 30000; // 30 seconds
+
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
+        const now = Date.now();
+
+        // Return cached projects if still fresh
+        if (projectsCache && (now - projectsCacheTime) < PROJECTS_CACHE_TTL) {
+            console.log('📦 Returning cached projects');
+            return res.json(projectsCache);
+        }
+
+        console.log('🔄 Fetching fresh projects list...');
+        const startTime = Date.now();
+
+        // Fetch fresh projects
         const projects = await getProjects();
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✅ Projects fetched in ${elapsed}ms`);
+
+        // Update cache
+        projectsCache = projects;
+        projectsCacheTime = now;
+
         res.json(projects);
     } catch (error) {
+        console.error('❌ Error fetching projects:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -1156,8 +1182,10 @@ async function startServer() {
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
 
-            // Start watching the projects folder for changes
-            await setupProjectsWatcher(); 
+            // File watcher disabled due to high CPU usage (100%+ CPU with chokidar)
+            // Projects are cached for 30 seconds instead, providing good performance
+            // await setupProjectsWatcher();
+            console.log('💡 Using project caching instead of file watching for better performance');
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
