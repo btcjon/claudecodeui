@@ -407,10 +407,21 @@ async function getProjects() {
           sessions: []
         };
 
-        // PERFORMANCE OPTIMIZATION: Skip expensive operations in initial load
-        // These can be fetched on-demand when user clicks on a project
-        project.sessions = [];
-        project.sessionMeta = { hasMore: false, total: 0 };
+        // PERFORMANCE OPTIMIZATION: Load only 3 most recent sessions
+        // This gives the UI enough data while staying fast
+        try {
+          const sessionResult = await getSessions(entry.name, 3, 0);
+          project.sessions = sessionResult.sessions || [];
+          project.sessionMeta = {
+            hasMore: sessionResult.hasMore,
+            total: sessionResult.total
+          };
+        } catch (e) {
+          project.sessions = [];
+          project.sessionMeta = { hasMore: false, total: 0 };
+        }
+
+        // Skip Cursor sessions and TaskMaster in initial load
         project.cursorSessions = [];
         project.taskmaster = {
           hasTaskmaster: false,
