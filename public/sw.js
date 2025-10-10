@@ -1,5 +1,5 @@
 // Service Worker for Claude Code UI PWA
-const CACHE_NAME = 'claude-ui-v1';
+const CACHE_NAME = 'claude-ui-v1.8.12';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -19,6 +19,13 @@ self.addEventListener('install', event => {
 
 // Fetch event
 self.addEventListener('fetch', event => {
+  // Skip caching for API requests
+  if (event.request.url.includes('/api/') ||
+      event.request.url.includes('/session/') ||
+      event.request.method !== 'GET') {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -26,10 +33,16 @@ self.addEventListener('fetch', event => {
         if (response) {
           return response;
         }
-        // Otherwise fetch from network
-        return fetch(event.request);
-      }
-    )
+        // Otherwise fetch from network with error handling
+        return fetch(event.request).catch(error => {
+          console.error('Fetch failed for', event.request.url, error);
+          // Return a basic fallback response for navigation requests
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          throw error;
+        });
+      })
   );
 });
 

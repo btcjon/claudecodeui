@@ -66,10 +66,9 @@ function GitPanel({ selectedProject, isMobile }) {
     try {
       const response = await authenticatedFetch(`/api/git/status?project=${encodeURIComponent(selectedProject.name)}`);
       const data = await response.json();
-      
-      
+
       if (data.error) {
-        console.error('Git status error:', data.error);
+        // Silently handle git errors (not a git repo, etc.)
         setGitStatus({ error: data.error, details: data.details });
       } else {
         setGitStatus(data);

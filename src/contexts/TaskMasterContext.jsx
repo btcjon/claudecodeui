@@ -241,9 +241,8 @@ export const TaskMasterProvider = ({ children }) => {
     if (!authLoading && user && token) {
       refreshProjects();
       refreshMCPStatus();
-    } else {
-      console.log('Auth not ready or no user, skipping project load:', { authLoading, user: !!user, token: !!token });
     }
+    // Silently skip project load if auth not ready
   }, [refreshProjects, refreshMCPStatus, authLoading, user, token]);
 
   // Clear errors when authentication changes
